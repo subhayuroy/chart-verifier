@@ -18,7 +18,6 @@ package checks
 
 import (
 	"fmt"
-	"path"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -37,8 +36,8 @@ const (
 	TestTemplatePrefix           = "templates/tests/"
 	ChartTestFilesExist          = "Chart test files exist"
 	ChartTestFilesDoesNotExist   = "Chart test files do not exist"
-	MinKuberVersionSpecified     = "Minimum Kubernetes version specified"
-	MinKuberVersionNotSpecified  = "Minimum Kubernetes version is not specified"
+	KuberVersionSpecified        = "Kubernetes version specified"
+	KuberVersionNotSpecified     = "Kubernetes version is not specified"
 	ValuesSchemaFileExist        = "Values schema file exist"
 	ValuesSchemaFileDoesNotExist = "Values schema file does not exist"
 	ValuesFileExist              = "Values file exist"
@@ -53,6 +52,7 @@ const (
 	ImageCertifyFailed           = "Failed to certify images"
 	ImageCertified               = "Image is Red Hat certified"
 	ImageNotCertified            = "Image is not Red Hat certified"
+	ChartTestingSuccess          = "Chart tests have passed"
 )
 
 func notImplemented() (Result, error) {
@@ -150,16 +150,16 @@ func IsCommunityChart(opts *CheckOptions) (Result, error) {
 	return notImplemented()
 }
 
-func HasMinKubeVersion(opts *CheckOptions) (Result, error) {
+func HasKubeVersion(opts *CheckOptions) (Result, error) {
 	c, _, err := LoadChartFromURI(opts.URI)
 	if err != nil {
 		return NewResult(false, err.Error()), err
 	}
 
-	r := NewResult(false, MinKuberVersionNotSpecified)
+	r := NewResult(false, KuberVersionNotSpecified)
 
 	if c.Metadata.KubeVersion != "" {
-		r.SetResult(true, MinKuberVersionSpecified)
+		r.SetResult(true, KuberVersionSpecified)
 	}
 
 	return r, nil
@@ -182,12 +182,11 @@ func NotContainCRDs(opts *CheckOptions) (Result, error) {
 }
 
 func HelmLint(opts *CheckOptions) (Result, error) {
-	c, p, err := LoadChartFromURI(opts.URI)
+	_, p, err := LoadChartFromURI(opts.URI)
 	if err != nil {
 		return NewResult(false, err.Error()), err
 	}
 	r := NewResult(true, HelmLintSuccessful)
-	p = path.Join(p, c.Name())
 	linter := lint.All(p, opts.Values, "default", false)
 	if linter.HighestSeverity > support.WarningSev {
 		reason := ""
