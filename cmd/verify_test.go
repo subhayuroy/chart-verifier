@@ -109,6 +109,7 @@ func TestCertify(t *testing.T) {
 
 		cmd.SetArgs([]string{
 			"-e", "is-helm-v3",
+			"-V", "4.9",
 			"../pkg/chartverifier/checks/chart-0.1.0-v3.valid.tgz",
 		})
 		require.NoError(t, cmd.Execute())
@@ -131,6 +132,7 @@ func TestCertify(t *testing.T) {
 
 		cmd.SetArgs([]string{
 			"-e", "is-helm-v3", // only consider a single check, perhaps more checks in the future
+			"-V", "4.9",
 			"-o", "json",
 			"../pkg/chartverifier/checks/chart-0.1.0-v3.valid.tgz",
 		})
@@ -138,7 +140,7 @@ func TestCertify(t *testing.T) {
 		require.NotEmpty(t, outBuf.String())
 
 		// attempts to deserialize the command's output, expecting a json string
-		certificate := chartverifier.Certificate{}
+		certificate := chartverifier.Report{}
 		err := json.Unmarshal([]byte(outBuf.String()), &certificate)
 		require.NoError(t, err)
 		require.True(t, len(certificate.Results) == 1, "Expected only 1 result")
@@ -157,6 +159,7 @@ func TestCertify(t *testing.T) {
 
 		cmd.SetArgs([]string{
 			"-e", "is-helm-v3", // only consider a single check, perhaps more checks in the future
+			"-V", "4.9",
 			"-o", "yaml",
 			"../pkg/chartverifier/checks/chart-0.1.0-v3.valid.tgz",
 		})
@@ -164,7 +167,7 @@ func TestCertify(t *testing.T) {
 		require.NotEmpty(t, outBuf.String())
 
 		// attempts to deserialize the command's output, expecting a json string
-		certificate := chartverifier.Certificate{}
+		certificate := chartverifier.Report{}
 		err := yaml.Unmarshal([]byte(outBuf.String()), &certificate)
 		require.NoError(t, err)
 		require.True(t, len(certificate.Results) == 1, "Expected only 1 result")

@@ -17,22 +17,29 @@
 package chartverifier
 
 import (
-	"github.com/redhat-certification/chart-verifier/pkg/chartverifier/checks"
-	"github.com/spf13/viper"
-	"helm.sh/helm/v3/pkg/cli"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-type CertifierBuilder interface {
-	SetRegistry(registry checks.Registry) CertifierBuilder
-	SetValues(vals map[string]interface{}) CertifierBuilder
-	SetChecks(checks []string) CertifierBuilder
-	SetConfig(config *viper.Viper) CertifierBuilder
-	SetOverrides([]string) CertifierBuilder
-	SetToolVersion(string) CertifierBuilder
-	SetSettings(settings *cli.EnvSettings) CertifierBuilder
-	Build() (Certifier, error)
-}
+func TestCertificationBuilder(t *testing.T) {
 
-type Certifier interface {
-	Certify(uri string) (*Certificate, error)
+	t.Run("Should fail building verifier when requiredChecks are not set", func(t *testing.T) {
+		b := NewVerifierBuilder()
+
+		c, err := b.Build()
+		require.Error(t, err)
+		require.Nil(t, c)
+	})
+
+	t.Run("Should build verifier when requiredChecks are set", func(t *testing.T) {
+		b := NewVerifierBuilder()
+
+		c, err := b.
+			SetChecks([]string{"a", "b"}).
+			Build()
+
+		require.NoError(t, err)
+		require.NotNil(t, c)
+	})
 }
