@@ -1,7 +1,8 @@
 package tool
 
 import (
-	"github.com/helm/chart-testing/v3/pkg/exec"
+	"fmt"
+
 	"github.com/helm/chart-testing/v3/pkg/tool"
 )
 
@@ -9,30 +10,48 @@ import (
 // to silence output being streamed to Stdout.
 type Helm struct {
 	tool.Helm
-	exec.ProcessExecutor
+	ProcessExecutor
 	extraArgs []string
 }
 
-func NewHelm(exec exec.ProcessExecutor, extraArgs []string) Helm {
+func NewHelm(exec ProcessExecutor, extraArgs []string) Helm {
 	return Helm{
-		tool.NewHelm(exec, extraArgs),
+		tool.NewHelm(exec.ProcessExecutor, extraArgs),
 		exec,
 		extraArgs,
 	}
 }
 
+func toStringArray(args []interface{}) []string {
+	copy := make([]string, len(args))
+	for i, a := range args {
+		copy[i] = fmt.Sprint(a)
+	}
+	return copy
+}
+
+func toInterfaceArray(args []string) []interface{} {
+	copy := make([]interface{}, len(args))
+	for i, a := range args {
+		copy[i] = a
+	}
+	return copy
+}
+
+// InstallWithValues overrides chart-testing's tool.Helm method to execute the modified RunProcessAndCaptureOutput
+// method.
 func (h Helm) InstallWithValues(chart string, valuesFile string, namespace string, release string) error {
-	var values []string
+	var values []interface{}
 	if valuesFile != "" {
-		values = []string{"--values", valuesFile}
+		values = []interface{}{"--values", valuesFile}
 	}
 
-	if _, err := h.RunProcessAndCaptureOutput("helm", "install", release, chart, "--namespace", namespace,
-		"--wait", values, h.extraArgs); err != nil {
-		return err
-	}
+	helmArgs := []interface{}{"install", release, chart, "--namespace", namespace, "--wait"}
+	helmArgs = append(helmArgs, values...)
+	helmArgs = append(helmArgs, toInterfaceArray(h.extraArgs)...)
 
-	return nil
+	_, err := h.RunProcessAndCaptureOutput("helm", helmArgs...)
+	return err
 }
 
 func (h Helm) Test(namespace string, release string) error {
