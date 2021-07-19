@@ -17,10 +17,18 @@
 package chartverifier
 
 import (
+	"crypto"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"github.com/pkg/errors"
 	"github.com/redhat-certification/chart-verifier/pkg/chartverifier/profiles"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/redhat-certification/chart-verifier/pkg/chartverifier/checks"
@@ -29,9 +37,9 @@ import (
 
 type ReportBuilder interface {
 	SetToolVersion(name string) ReportBuilder
-	SetProfile(name string) ReportBuilder
+	SetProfile(vendorType profiles.VendorType, version string) ReportBuilder
 	SetChartUri(name string) ReportBuilder
-	AddCheck(name checks.CheckName, checkType checks.CheckType, result checks.Result) ReportBuilder
+	AddCheck(check checks.Check, result checks.Result) ReportBuilder
 	SetChart(chart *helmchart.Chart) ReportBuilder
 	SetCertifiedOpenShiftVersion(version string) ReportBuilder
 	Build() (*Report, error)
@@ -64,8 +72,9 @@ func (r *reportBuilder) SetToolVersion(version string) ReportBuilder {
 	return r
 }
 
-func (r *reportBuilder) SetProfile(profileName string) ReportBuilder {
-	r.Report.Metadata.ToolMetadata.Profile = profileName
+func (r *reportBuilder) SetProfile(vendorType profiles.VendorType, version string) ReportBuilder {
+	r.Report.Metadata.ToolMetadata.Profile.VendorType = string(vendorType)
+	r.Report.Metadata.ToolMetadata.Profile.Version = version
 	return r
 }
 
@@ -80,8 +89,8 @@ func (r *reportBuilder) SetChart(chart *helmchart.Chart) ReportBuilder {
 	return r
 }
 
-func (r *reportBuilder) AddCheck(name checks.CheckName, checkType checks.CheckType, result checks.Result) ReportBuilder {
-	checkReport := r.Report.AddCheck(name, checkType)
+func (r *reportBuilder) AddCheck(check checks.Check, result checks.Result) ReportBuilder {
+	checkReport := r.Report.AddCheck(check)
 	checkReport.SetResult(result.Ok, result.Reason)
 	return r
 }
@@ -91,7 +100,8 @@ func (r *reportBuilder) Build() (*Report, error) {
 	for _, annotation := range profiles.Get().Annotations {
 		switch annotation {
 		case profiles.DigestAnnotation:
-			r.Report.Metadata.ToolMetadata.Digest = GenerateSha(r.Chart.Raw)
+			r.Report.Metadata.ToolMetadata.Digests.Chart = GenerateSha(r.Chart.Raw)
+			r.Report.Metadata.ToolMetadata.Digest = r.Report.Metadata.ToolMetadata.Digests.Chart
 		case profiles.LastCertifiedTimestampAnnotation:
 			r.Report.Metadata.ToolMetadata.LastCertifiedTimestamp = time.Now().Format("2006-01-02T15:04:05.999999-07:00")
 		case profiles.OCPVersionAnnotation:
@@ -102,6 +112,9 @@ func (r *reportBuilder) Build() (*Report, error) {
 			}
 		}
 	}
+
+	r.Report.Metadata.ToolMetadata.Digests.Package = GetPackageDigest(r.Report.Metadata.ToolMetadata.ChartUri)
+
 	return &r.Report, nil
 }
 
@@ -149,4 +162,44 @@ func GenerateSha(rawFiles []*helmchart.File) string {
 	}
 
 	return fmt.Sprintf("sha256:%x", chartSha.Sum(nil))
+}
+
+func GetPackageDigest(uri string) string {
+
+	url, err := url.Parse(uri)
+	if err != nil {
+		return ""
+	}
+	var chartReader io.Reader
+	switch url.Scheme {
+	case "http", "https":
+		var chartGetResponse *http.Response
+		chartGetResponse, err = http.Get(url.String())
+		if err == nil {
+			chartReader = chartGetResponse.Body
+		}
+	case "file", "":
+		if strings.HasSuffix(url.Path, ".tgz") {
+			chartReader, _ = os.Open(url.Path)
+		}
+	default:
+		err = errors.Errorf("scheme %q not supported", url.Scheme)
+	}
+	if err != nil || chartReader == nil {
+		return ""
+	}
+	return getDigest(chartReader)
+}
+
+// Digest hashes a reader and returns a SHA256 digest.
+func getDigest(in io.Reader) string {
+	if in == nil {
+		return ""
+	}
+
+	hash := crypto.SHA256.New()
+	if _, err := io.Copy(hash, in); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(hash.Sum(nil))
 }
